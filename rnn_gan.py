@@ -44,13 +44,14 @@ from subprocess import call, Popen
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
+import tensorflow_addons as tfa
 
 
 import music_data_utils
 from midi_statistics import get_all_stats
 
-flags = tf.flags
-logging = tf.logging
+flags = tf.compat.v1.flags
+logging = tf.compat.v1.logging
 
 flags.DEFINE_string("datadir", None, "Directory to save and load midi music files.")
 flags.DEFINE_string("traindir", None, "Directory to save checkpoints and gnuplot files.")
@@ -149,7 +150,7 @@ model_layout_flags = ['num_layers_g', 'num_layers_d', 'meta_layer_size', 'hidden
 def make_rnn_cell(rnn_layer_sizes,
                   dropout_keep_prob=1.0,
                   attn_length=0,
-                  base_cell=tf.contrib.rnn.BasicLSTMCell,
+                  base_cell=tfa.rnn.LayerNormLSTMCell,
                   state_is_tuple=True,
                   reuse=False):
   """Makes a RNN cell from the given hyperparameters.
@@ -158,23 +159,23 @@ def make_rnn_cell(rnn_layer_sizes,
     rnn_layer_sizes: A list of integer sizes (in units) for each layer of the RNN.
     dropout_keep_prob: The float probability to keep the output of any given sub-cell.
     attn_length: The size of the attention vector.
-    base_cell: The base tf.contrib.rnn.RNNCell to use for sub-cells.
+    base_cell: The base tfa.rnn.RNNCell to use for sub-cells.
     state_is_tuple: A boolean specifying whether to use tuple of hidden matrix
         and cell matrix as a state instead of a concatenated matrix.
 
   Returns:
-      A tf.contrib.rnn.MultiRNNCell based on the given hyperparameters.
+      A tfa.rnn.MultiRNNCell based on the given hyperparameters.
   """
   cells = []
   for num_units in rnn_layer_sizes:
     cell = base_cell(num_units, state_is_tuple=state_is_tuple, reuse=reuse)
-    cell = tf.contrib.rnn.DropoutWrapper(
+    cell = tfa.rnn.DropoutWrapper(
         cell, output_keep_prob=dropout_keep_prob)
     cells.append(cell)
 
-  cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
+  cell = tfa.rnn.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
   if attn_length:
-    cell = tf.contrib.rnn.AttentionCellWrapper(
+    cell = tfa.rnn.AttentionCellWrapper(
         cell, attn_length, state_is_tuple=state_is_tuple, reuse=reuse)
 
   return cell
@@ -223,7 +224,7 @@ def linear(inp, output_dim, scope=None, stddev=1.0, reuse_scope=False):
   norm = tf.random_normal_initializer(stddev=stddev, dtype=data_type())
   const = tf.constant_initializer(0.0, dtype=data_type())
   with tf.variable_scope(scope or 'linear') as scope:
-    scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+    scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
     #print('inp.get_shape(): {}'.format(inp.get_shape()))
@@ -236,7 +237,7 @@ def minibatch(inp, num_kernels=25, kernel_dim=10, scope=None, msg='', reuse_scop
    Borrowed from http://blog.aylien.com/introduction-generative-adversarial-networks-code-tensorflow/
   """
   with tf.variable_scope(scope or 'minibatch_d') as scope:
-    scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+    scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
   
@@ -279,7 +280,7 @@ class RNNGAN(object):
   
     
     with tf.variable_scope('G') as scope:
-      scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
       #lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(FLAGS.hidden_size_g, forget_bias=1.0, state_is_tuple=True)
       if is_training and FLAGS.keep_prob < 1:
         #lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
@@ -395,7 +396,7 @@ class RNNGAN(object):
     # Here we create two copies of the discriminator network (that share parameters),
     # as you cannot use the same network with different inputs in TensorFlow.
     with tf.variable_scope('D') as scope:
-      scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
       # Make list of tensors. One per step in recurrence.
       # Each tensor is batchsize*numfeatures.
       # TODO: (possibly temporarily) disabling meta info
@@ -485,7 +486,7 @@ class RNNGAN(object):
       #print("inputs",inputs)
       #print("initial_state_fw",self._initial_state_fw)
       #print("initial_state_bw",self._initial_state_bw)
-      outputs, state_fw, state_bw = tf.contrib.rnn.static_bidirectional_rnn(cell_fw, cell_bw, inputs, initial_state_fw=self._initial_state_fw, initial_state_bw=self._initial_state_bw)
+      outputs, state_fw, state_bw = tfa.rnn.static_bidirectional_rnn(cell_fw, cell_bw, inputs, initial_state_fw=self._initial_state_fw, initial_state_bw=self._initial_state_bw)
       #outputs[0] = tf.Print(outputs[0], [outputs[0]],
       #        '{} outputs[0] = '.format(msg), summarize=20, first_n=20)
       #state = tf.concat(state_fw, state_bw)
@@ -737,7 +738,7 @@ def main(_):
  
   with tf.Graph().as_default(), tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)) as session:
     with tf.variable_scope("model", reuse=None) as scope:
-      scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
       m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
 
@@ -784,7 +785,7 @@ def main(_):
           print('Changing songlength, now training on {} events from songs.'.format(new_songlength))
           FLAGS.songlength = new_songlength
           with tf.variable_scope("model", reuse=True) as scope:
-            scope.set_regularizer(tf.contrib.layers.l2_regularizer(scale=FLAGS.reg_scale))
+            scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
             m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
         if not FLAGS.adam:
@@ -918,5 +919,5 @@ def main(_):
 
 
 if __name__ == "__main__":
-  tf.app.run()
+  tf.compat.v1.app.run()
 
