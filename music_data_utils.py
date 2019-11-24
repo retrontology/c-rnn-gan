@@ -801,6 +801,7 @@ class MusicDataLoader(object):
     self.songs['train'] = []
     
     # https://songwritingandrecordingtips.wordpress.com/2012/02/09/chord-progressions-that-fit-together/
+    # C D E F G A
     # M m m M M m
     base_tones     = [0,2,4,5,7,9]
     chord_is_major = [True,False,False,True,True,False]
@@ -1415,7 +1416,7 @@ def cents_to_pitchwheel_units(cents):
 def onehot(i, length):
   a = np.zeros(shape=[length])
   a[i] = 1
-  return a
+  return argv
 
 
 

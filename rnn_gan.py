@@ -223,7 +223,7 @@ def my_reduce_mean(what_to_take_mean_over):
 def linear(inp, output_dim, scope=None, stddev=1.0, reuse_scope=False):
   norm = tf.random_normal_initializer(stddev=stddev, dtype=data_type())
   const = tf.constant_initializer(0.0, dtype=data_type())
-  with tf.variable_scope(scope or 'linear') as scope:
+  with tf.compat.v1.variable_scope(scope or 'linear') as scope:
     scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
@@ -236,7 +236,7 @@ def minibatch(inp, num_kernels=25, kernel_dim=10, scope=None, msg='', reuse_scop
   """
    Borrowed from http://blog.aylien.com/introduction-generative-adversarial-networks-code-tensorflow/
   """
-  with tf.variable_scope(scope or 'minibatch_d') as scope:
+  with tf.compat.v1.variable_scope(scope or 'minibatch_d') as scope:
     scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
@@ -270,8 +270,8 @@ class RNNGAN(object):
     self.songlength = songlength#self.global_step            = tf.Variable(0, trainable=False)
 
     print('songlength: {}'.format(self.songlength))
-    self._input_songdata = tf.placeholder(shape=[batch_size, songlength, num_song_features], dtype=data_type())
-    self._input_metadata = tf.placeholder(shape=[batch_size, num_meta_features], dtype=data_type())
+    self._input_songdata = tf.compat.v1.placeholder(shape=[batch_size, songlength, num_song_features], dtype=data_type())
+    self._input_metadata = tf.compat.v1.placeholder(shape=[batch_size, num_meta_features], dtype=data_type())
     #_split = tf.split(self._input_songdata,songlength,1)[0]
     print("self._input_songdata",self._input_songdata, 'songlength',songlength)
     #print(tf.squeeze(_split,[1]))
@@ -279,7 +279,7 @@ class RNNGAN(object):
               for input_ in tf.split(self._input_songdata,songlength,1)]
   
     
-    with tf.variable_scope('G') as scope:
+    with tf.compat.v1.variable_scope('G') as scope:
       scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
       #lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(FLAGS.hidden_size_g, forget_bias=1.0, state_is_tuple=True)
       if is_training and FLAGS.keep_prob < 1:
@@ -395,7 +395,7 @@ class RNNGAN(object):
     #
     # Here we create two copies of the discriminator network (that share parameters),
     # as you cannot use the same network with different inputs in TensorFlow.
-    with tf.variable_scope('D') as scope:
+    with tf.compat.v1.variable_scope('D') as scope:
       scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
       # Make list of tensors. One per step in recurrence.
       # Each tensor is batchsize*numfeatures.
@@ -784,7 +784,7 @@ def main(_):
         if new_songlength != FLAGS.songlength:
           print('Changing songlength, now training on {} events from songs.'.format(new_songlength))
           FLAGS.songlength = new_songlength
-          with tf.variable_scope("model", reuse=True) as scope:
+          with tf.compat.v1.variable_scope("model", reuse=True) as scope:
             scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
             m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
