@@ -1416,7 +1416,7 @@ def cents_to_pitchwheel_units(cents):
 def onehot(i, length):
   a = np.zeros(shape=[length])
   a[i] = 1
-  return argv
+  return sys.argv
 
 
 

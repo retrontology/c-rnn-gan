@@ -44,7 +44,6 @@ from subprocess import call, Popen
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import timeline
-import tensorflow_addons as tfa
 
 
 import music_data_utils
@@ -150,7 +149,7 @@ model_layout_flags = ['num_layers_g', 'num_layers_d', 'meta_layer_size', 'hidden
 def make_rnn_cell(rnn_layer_sizes,
                   dropout_keep_prob=1.0,
                   attn_length=0,
-                  base_cell=tfa.rnn.LayerNormLSTMCell,
+                  base_cell=tf.compat.v1.nn.rnn_cell.BasicLSTMCell,
                   state_is_tuple=True,
                   reuse=False):
   """Makes a RNN cell from the given hyperparameters.
@@ -159,23 +158,23 @@ def make_rnn_cell(rnn_layer_sizes,
     rnn_layer_sizes: A list of integer sizes (in units) for each layer of the RNN.
     dropout_keep_prob: The float probability to keep the output of any given sub-cell.
     attn_length: The size of the attention vector.
-    base_cell: The base tfa.rnn.RNNCell to use for sub-cells.
+    base_cell: The base tf.contrib.rnn.RNNCell to use for sub-cells.
     state_is_tuple: A boolean specifying whether to use tuple of hidden matrix
         and cell matrix as a state instead of a concatenated matrix.
 
   Returns:
-      A tfa.rnn.MultiRNNCell based on the given hyperparameters.
+      A tf.contrib.rnn.MultiRNNCell based on the given hyperparameters.
   """
   cells = []
   for num_units in rnn_layer_sizes:
     cell = base_cell(num_units, state_is_tuple=state_is_tuple, reuse=reuse)
-    cell = tfa.rnn.DropoutWrapper(
+    cell = tf.compat.v1.nn.rnn_cell.DropoutWrapper(
         cell, output_keep_prob=dropout_keep_prob)
     cells.append(cell)
 
-  cell = tfa.rnn.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
+  cell = tf.compat.v1.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=state_is_tuple)
   if attn_length:
-    cell = tfa.rnn.AttentionCellWrapper(
+    cell = tf.compat.v1.nn.rnn_cell.AttentionCellWrapper(
         cell, attn_length, state_is_tuple=state_is_tuple, reuse=reuse)
 
   return cell
@@ -214,22 +213,22 @@ def my_reduce_mean(what_to_take_mean_over):
   #print(what_to_take_mean_over.get_shape())
   for d in what_to_take_mean_over.get_shape():
     #print(d)
-    if type(d) == tf.Dimension:
+    if type(d) == tf.compat.v1.Dimension:
       denom = denom*d.value
     else:
       denom = denom*d
-  return tf.reduce_sum(what_to_take_mean_over)/denom
+  return tf.reduce_sum(input_tensor=what_to_take_mean_over)/denom
 
 def linear(inp, output_dim, scope=None, stddev=1.0, reuse_scope=False):
-  norm = tf.random_normal_initializer(stddev=stddev, dtype=data_type())
-  const = tf.constant_initializer(0.0, dtype=data_type())
+  norm = tf.compat.v1.random_normal_initializer(stddev=stddev, dtype=data_type())
+  const = tf.compat.v1.constant_initializer(0.0, dtype=data_type())
   with tf.compat.v1.variable_scope(scope or 'linear') as scope:
-    scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+    scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
     if reuse_scope:
       scope.reuse_variables()
     #print('inp.get_shape(): {}'.format(inp.get_shape()))
-    w = tf.get_variable('w', [inp.get_shape()[1], output_dim], initializer=norm, dtype=data_type())
-    b = tf.get_variable('b', [output_dim], initializer=const, dtype=data_type())
+    w = tf.compat.v1.get_variable('w', [inp.get_shape()[1], output_dim], initializer=norm, dtype=data_type())
+    b = tf.compat.v1.get_variable('b', [output_dim], initializer=const, dtype=data_type())
   return tf.matmul(inp, w) + b
 
 def minibatch(inp, num_kernels=25, kernel_dim=10, scope=None, msg='', reuse_scope=False):
@@ -237,25 +236,25 @@ def minibatch(inp, num_kernels=25, kernel_dim=10, scope=None, msg='', reuse_scop
    Borrowed from http://blog.aylien.com/introduction-generative-adversarial-networks-code-tensorflow/
   """
   with tf.compat.v1.variable_scope(scope or 'minibatch_d') as scope:
-    scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+    scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
     if reuse_scope:
       scope.reuse_variables()
   
-    inp = tf.Print(inp, [inp],
+    inp = tf.compat.v1.Print(inp, [inp],
             '{} inp = '.format(msg), summarize=20, first_n=20)
     x = tf.sigmoid(linear(inp, num_kernels * kernel_dim, scope))
     activation = tf.reshape(x, (-1, num_kernels, kernel_dim))
-    activation = tf.Print(activation, [activation],
+    activation = tf.compat.v1.Print(activation, [activation],
             '{} activation = '.format(msg), summarize=20, first_n=20)
     diffs = tf.expand_dims(activation, 3) - \
-                tf.expand_dims(tf.transpose(activation, [1, 2, 0]), 0)
-    diffs = tf.Print(diffs, [diffs],
+                tf.expand_dims(tf.transpose(a=activation, perm=[1, 2, 0]), 0)
+    diffs = tf.compat.v1.Print(diffs, [diffs],
             '{} diffs = '.format(msg), summarize=20, first_n=20)
-    abs_diffs = tf.reduce_sum(tf.abs(diffs), 2)
-    abs_diffs = tf.Print(abs_diffs, [abs_diffs],
+    abs_diffs = tf.reduce_sum(input_tensor=tf.abs(diffs), axis=2)
+    abs_diffs = tf.compat.v1.Print(abs_diffs, [abs_diffs],
             '{} abs_diffs = '.format(msg), summarize=20, first_n=20)
-    minibatch_features = tf.reduce_sum(tf.exp(-abs_diffs), 2)
-    minibatch_features = tf.Print(minibatch_features, [tf.reduce_min(minibatch_features), tf.reduce_max(minibatch_features)],
+    minibatch_features = tf.reduce_sum(input_tensor=tf.exp(-abs_diffs), axis=2)
+    minibatch_features = tf.compat.v1.Print(minibatch_features, [tf.reduce_min(input_tensor=minibatch_features), tf.reduce_max(input_tensor=minibatch_features)],
             '{} minibatch_features (min,max) = '.format(msg), summarize=20, first_n=20)
   return tf.concat( [inp, minibatch_features],1)
 
@@ -280,7 +279,7 @@ class RNNGAN(object):
   
     
     with tf.compat.v1.variable_scope('G') as scope:
-      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+      scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
       #lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(FLAGS.hidden_size_g, forget_bias=1.0, state_is_tuple=True)
       if is_training and FLAGS.keep_prob < 1:
         #lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
@@ -294,14 +293,14 @@ class RNNGAN(object):
 
       # TODO: (possibly temporarily) disabling meta info
       if FLAGS.generate_meta:
-        metainputs = tf.random_uniform(shape=[batch_size, int(FLAGS.random_input_scale*num_meta_features)], minval=0.0, maxval=1.0)
+        metainputs = tf.random.uniform(shape=[batch_size, int(FLAGS.random_input_scale*num_meta_features)], minval=0.0, maxval=1.0)
         meta_g = tf.nn.relu(linear(metainputs, FLAGS.meta_layer_size, scope='meta_layer', reuse_scope=False))
-        meta_softmax_w = tf.get_variable("meta_softmax_w", [FLAGS.meta_layer_size, num_meta_features])
-        meta_softmax_b = tf.get_variable("meta_softmax_b", [num_meta_features])
-        meta_logits = tf.nn.xw_plus_b(meta_g, meta_softmax_w, meta_softmax_b)
+        meta_softmax_w = tf.compat.v1.get_variable("meta_softmax_w", [FLAGS.meta_layer_size, num_meta_features])
+        meta_softmax_b = tf.compat.v1.get_variable("meta_softmax_b", [num_meta_features])
+        meta_logits = tf.compat.v1.nn.xw_plus_b(meta_g, meta_softmax_w, meta_softmax_b)
         meta_probs = tf.nn.softmax(meta_logits)
 
-      random_rnninputs = tf.random_uniform(shape=[batch_size, songlength, int(FLAGS.random_input_scale*num_song_features)], minval=0.0, maxval=1.0, dtype=data_type())
+      random_rnninputs = tf.random.uniform(shape=[batch_size, songlength, int(FLAGS.random_input_scale*num_song_features)], minval=0.0, maxval=1.0, dtype=data_type())
 
       # Make list of tensors. One per step in recurrence.
       # Each tensor is batchsize*numfeatures.
@@ -311,7 +310,7 @@ class RNNGAN(object):
       # REAL GENERATOR:
       state = self._initial_state
       # as we feed the output as the input to the next, we 'invent' the initial 'output'.
-      generated_point = tf.random_uniform(shape=[batch_size, num_song_features], minval=0.0, maxval=1.0, dtype=data_type())
+      generated_point = tf.random.uniform(shape=[batch_size, num_song_features], minval=0.0, maxval=1.0, dtype=data_type())
       outputs = []
       self._generated_features = []
       for i,input_ in enumerate(random_rnninputs):
@@ -335,7 +334,7 @@ class RNNGAN(object):
       # PRETRAINING GENERATOR, will feed inputs, not generated outputs:
       scope.reuse_variables()
       # as we feed the output as the input to the next, we 'invent' the initial 'output'.
-      prev_target = tf.random_uniform(shape=[batch_size, num_song_features], minval=0.0, maxval=1.0, dtype=data_type())
+      prev_target = tf.random.uniform(shape=[batch_size, num_song_features], minval=0.0, maxval=1.0, dtype=data_type())
       outputs = []
       self._generated_features_pretraining = []
       for i,input_ in enumerate(random_rnninputs):
@@ -362,30 +361,30 @@ class RNNGAN(object):
 
     # These are used both for pretraining and for D/G training further down.
     self._lr = tf.Variable(FLAGS.learning_rate, trainable=False, dtype=data_type())
-    self.g_params = [v for v in tf.trainable_variables() if v.name.startswith('model/G/')]
+    self.g_params = [v for v in tf.compat.v1.trainable_variables() if v.name.startswith('model/G/')]
     if FLAGS.adam:
-      g_optimizer = tf.train.AdamOptimizer(self._lr)
+      g_optimizer = tf.compat.v1.train.AdamOptimizer(self._lr)
     else:
-      g_optimizer = tf.train.GradientDescentOptimizer(self._lr)
+      g_optimizer = tf.compat.v1.train.GradientDescentOptimizer(self._lr)
    
-    reg_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    reg_losses = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES)
     reg_constant = 0.1  # Choose an appropriate one.
     reg_loss = reg_constant * sum(reg_losses)
-    reg_loss = tf.Print(reg_loss, reg_losses,
+    reg_loss = tf.compat.v1.Print(reg_loss, reg_losses,
                   'reg_losses = ', summarize=20, first_n=20)
     #if not FLAGS.disable_l2_regularizer:
     #  print('L2 regularization. Reg losses: {}'.format([v.name for v in reg_losses]))
    
     # ---BEGIN, PRETRAINING. ---
     
-    print(tf.transpose(tf.stack(self._generated_features_pretraining), perm=[1, 0, 2]).get_shape())
+    print(tf.transpose(a=tf.stack(self._generated_features_pretraining), perm=[1, 0, 2]).get_shape())
     print(self._input_songdata.get_shape())
-    self.rnn_pretraining_loss = tf.reduce_mean(tf.squared_difference(x=tf.transpose(tf.stack(self._generated_features_pretraining), perm=[1, 0, 2]), y=self._input_songdata))
+    self.rnn_pretraining_loss = tf.reduce_mean(input_tensor=tf.math.squared_difference(x=tf.transpose(a=tf.stack(self._generated_features_pretraining), perm=[1, 0, 2]), y=self._input_songdata))
     if not FLAGS.disable_l2_regularizer:
       self.rnn_pretraining_loss = self.rnn_pretraining_loss+reg_loss
     
     
-    pretraining_grads, _ = tf.clip_by_global_norm(tf.gradients(self.rnn_pretraining_loss, self.g_params), FLAGS.max_grad_norm)
+    pretraining_grads, _ = tf.clip_by_global_norm(tf.gradients(ys=self.rnn_pretraining_loss, xs=self.g_params), FLAGS.max_grad_norm)
     self.opt_pretraining = g_optimizer.apply_gradients(zip(pretraining_grads, self.g_params))
 
     # ---END, PRETRAINING---
@@ -396,7 +395,7 @@ class RNNGAN(object):
     # Here we create two copies of the discriminator network (that share parameters),
     # as you cannot use the same network with different inputs in TensorFlow.
     with tf.compat.v1.variable_scope('D') as scope:
-      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+      scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
       # Make list of tensors. One per step in recurrence.
       # Each tensor is batchsize*numfeatures.
       # TODO: (possibly temporarily) disabling meta info
@@ -422,35 +421,35 @@ class RNNGAN(object):
 
     # Define the loss for discriminator and generator networks (see the original
     # paper for details), and create optimizers for both
-    self.d_loss = tf.reduce_mean(-tf.log(tf.clip_by_value(self.real_d, 1e-1000000, 1.0)) \
-                                 -tf.log(1 - tf.clip_by_value(self.generated_d, 0.0, 1.0-1e-1000000)))
-    self.g_loss_feature_matching = tf.reduce_sum(tf.squared_difference(self.real_d_features, self.generated_d_features))
-    self.g_loss = tf.reduce_mean(-tf.log(tf.clip_by_value(self.generated_d, 1e-1000000, 1.0)))
+    self.d_loss = tf.reduce_mean(input_tensor=-tf.math.log(tf.clip_by_value(self.real_d, 1e-1000000, 1.0)) \
+                                 -tf.math.log(1 - tf.clip_by_value(self.generated_d, 0.0, 1.0-1e-1000000)))
+    self.g_loss_feature_matching = tf.reduce_sum(input_tensor=tf.math.squared_difference(self.real_d_features, self.generated_d_features))
+    self.g_loss = tf.reduce_mean(input_tensor=-tf.math.log(tf.clip_by_value(self.generated_d, 1e-1000000, 1.0)))
 
     if not FLAGS.disable_l2_regularizer:
       self.d_loss = self.d_loss+reg_loss
       self.g_loss_feature_matching = self.g_loss_feature_matching+reg_loss
       self.g_loss = self.g_loss+reg_loss
-    self.d_params = [v for v in tf.trainable_variables() if v.name.startswith('model/D/')]
+    self.d_params = [v for v in tf.compat.v1.trainable_variables() if v.name.startswith('model/D/')]
 
     if not is_training:
       return
 
-    d_optimizer = tf.train.GradientDescentOptimizer(self._lr*FLAGS.d_lr_factor)
-    d_grads, _ = tf.clip_by_global_norm(tf.gradients(self.d_loss, self.d_params),
+    d_optimizer = tf.compat.v1.train.GradientDescentOptimizer(self._lr*FLAGS.d_lr_factor)
+    d_grads, _ = tf.clip_by_global_norm(tf.gradients(ys=self.d_loss, xs=self.d_params),
                                         FLAGS.max_grad_norm)
     self.opt_d = d_optimizer.apply_gradients(zip(d_grads, self.d_params))
     if FLAGS.feature_matching:
-      g_grads, _ = tf.clip_by_global_norm(tf.gradients(self.g_loss_feature_matching,
-                                                       self.g_params),
+      g_grads, _ = tf.clip_by_global_norm(tf.gradients(ys=self.g_loss_feature_matching,
+                                                       xs=self.g_params),
                                         FLAGS.max_grad_norm)
     else:
-      g_grads, _ = tf.clip_by_global_norm(tf.gradients(self.g_loss, self.g_params),
+      g_grads, _ = tf.clip_by_global_norm(tf.gradients(ys=self.g_loss, xs=self.g_params),
                                         FLAGS.max_grad_norm)
     self.opt_g = g_optimizer.apply_gradients(zip(g_grads, self.g_params))
 
-    self._new_lr = tf.placeholder(shape=[], name="new_learning_rate", dtype=data_type())
-    self._lr_update = tf.assign(self._lr, self._new_lr)
+    self._new_lr = tf.compat.v1.placeholder(shape=[], name="new_learning_rate", dtype=data_type())
+    self._lr_update = tf.compat.v1.assign(self._lr, self._new_lr)
 
   def discriminator(self, inputs, is_training, msg=''):
     # RNN discriminator:
@@ -459,7 +458,7 @@ class RNNGAN(object):
     #inputs[0] = tf.Print(inputs[0], [inputs[0]],
     #        '{} inputs[0] = '.format(msg), summarize=20, first_n=20)
     if is_training and FLAGS.keep_prob < 1:
-      inputs = [tf.nn.dropout(input_, FLAGS.keep_prob) for input_ in inputs]
+      inputs = [tf.nn.dropout(input_, 1 - (1 - (FLAGS.keep_prob))) for input_ in inputs]
     
     #lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(FLAGS.hidden_size_d, forget_bias=1.0, state_is_tuple=True)
     if is_training and FLAGS.keep_prob < 1:
@@ -486,7 +485,7 @@ class RNNGAN(object):
       #print("inputs",inputs)
       #print("initial_state_fw",self._initial_state_fw)
       #print("initial_state_bw",self._initial_state_bw)
-      outputs, state_fw, state_bw = tfa.rnn.static_bidirectional_rnn(cell_fw, cell_bw, inputs, initial_state_fw=self._initial_state_fw, initial_state_bw=self._initial_state_bw)
+      outputs, state_fw, state_bw = tf.compat.v1.nn.static_bidirectional_rnn(cell_fw, cell_bw, inputs, initial_state_fw=self._initial_state_fw, initial_state_bw=self._initial_state_bw)
       #outputs[0] = tf.Print(outputs[0], [outputs[0]],
       #        '{} outputs[0] = '.format(msg), summarize=20, first_n=20)
       #state = tf.concat(state_fw, state_bw)
@@ -504,17 +503,17 @@ class RNNGAN(object):
     if FLAGS.end_classification:
       decisions = [tf.sigmoid(linear(output, 1, 'decision', reuse_scope=(i!=0))) for i,output in enumerate([outputs[0], outputs[-1]])]
       decisions = tf.stack(decisions)
-      decisions = tf.transpose(decisions, perm=[1,0,2])
+      decisions = tf.transpose(a=decisions, perm=[1,0,2])
       print('shape, decisions: {}'.format(decisions.get_shape()))
     else:
       decisions = [tf.sigmoid(linear(output, 1, 'decision', reuse_scope=(i!=0))) for i,output in enumerate(outputs)]
       decisions = tf.stack(decisions)
-      decisions = tf.transpose(decisions, perm=[1,0,2])
+      decisions = tf.transpose(a=decisions, perm=[1,0,2])
       print('shape, decisions: {}'.format(decisions.get_shape()))
-    decision = tf.reduce_mean(decisions, reduction_indices=[1,2])
-    decision = tf.Print(decision, [decision],
+    decision = tf.reduce_mean(input_tensor=decisions, axis=[1,2])
+    decision = tf.compat.v1.Print(decision, [decision],
             '{} decision = '.format(msg), summarize=20, first_n=20)
-    return (decision,tf.transpose(tf.stack(outputs), perm=[1,0,2]))
+    return (decision,tf.transpose(a=tf.stack(outputs), perm=[1,0,2]))
       
 
   
@@ -575,7 +574,7 @@ def run_epoch(session, model, loader, datasetlabel, eval_op_g, eval_op_d, pretra
   loader.rewind(part=datasetlabel)
   [batch_meta, batch_song] = loader.get_batch(model.batch_size, model.songlength, part=datasetlabel)
 
-  run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+  run_options = tf.compat.v1.RunOptions(trace_level=tf.compat.v1.RunOptions.FULL_TRACE)
 
   while batch_meta is not None and batch_song is not None:
     op_g = eval_op_g
@@ -738,7 +737,7 @@ def main(_):
  
   with tf.Graph().as_default(), tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=FLAGS.log_device_placement)) as session:
     with tf.compat.v1.variable_scope("model", reuse=None) as scope:
-      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+      scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
       m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
 
@@ -748,29 +747,29 @@ def main(_):
         if v.name.startswith('model/G/'):
           print(v.name[:-2])
           vars_to_restore[v.name[:-2]] = v
-      saver = tf.train.Saver(vars_to_restore)
+      saver = tf.compat.v1.train.Saver(vars_to_restore)
       ckpt = tf.train.get_checkpoint_state(FLAGS.traindir)
-      if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+      if ckpt and tf.io.gfile.exists(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path,end=" ")
         saver.restore(session, ckpt.model_checkpoint_path)
-        session.run(tf.initialize_variables([v for v in tf.trainable_variables() if v.name.startswith('model/D/')]))
+        session.run(tf.compat.v1.initialize_variables([v for v in tf.compat.v1.trainable_variables() if v.name.startswith('model/D/')]))
       else:
         print("Created model with fresh parameters.")
-        session.run(tf.initialize_all_variables())
-      saver = tf.train.Saver(tf.all_variables())
+        session.run(tf.compat.v1.initialize_all_variables())
+      saver = tf.compat.v1.train.Saver(tf.compat.v1.all_variables())
     else:
-      saver = tf.train.Saver(tf.all_variables())
+      saver = tf.compat.v1.train.Saver(tf.compat.v1.all_variables())
       ckpt = tf.train.get_checkpoint_state(FLAGS.traindir)
-      if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+      if ckpt and tf.io.gfile.exists(ckpt.model_checkpoint_path):
         print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
         saver.restore(session, ckpt.model_checkpoint_path)
       else:
         print("Created model with fresh parameters.")
-        session.run(tf.initialize_all_variables())
+        session.run(tf.compat.v1.initialize_all_variables())
 
     run_metadata = None
     if FLAGS.profiling:
-      run_metadata = tf.RunMetadata()
+      run_metadata = tf.compat.v1.RunMetadata()
     if not FLAGS.sample:
       train_g_loss,train_d_loss = 1.0,1.0
       for i in range(global_step, FLAGS.max_epoch):
@@ -785,7 +784,7 @@ def main(_):
           print('Changing songlength, now training on {} events from songs.'.format(new_songlength))
           FLAGS.songlength = new_songlength
           with tf.compat.v1.variable_scope("model", reuse=True) as scope:
-            scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
+            scope.set_regularizer(tf.keras.regularizers.l2(l=0.5 * (FLAGS.reg_scale)))
             m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
         if not FLAGS.adam:
