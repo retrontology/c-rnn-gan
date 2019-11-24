@@ -224,7 +224,7 @@ def linear(inp, output_dim, scope=None, stddev=1.0, reuse_scope=False):
   norm = tf.random_normal_initializer(stddev=stddev, dtype=data_type())
   const = tf.constant_initializer(0.0, dtype=data_type())
   with tf.variable_scope(scope or 'linear') as scope:
-    scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+    scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
     #print('inp.get_shape(): {}'.format(inp.get_shape()))
@@ -237,7 +237,7 @@ def minibatch(inp, num_kernels=25, kernel_dim=10, scope=None, msg='', reuse_scop
    Borrowed from http://blog.aylien.com/introduction-generative-adversarial-networks-code-tensorflow/
   """
   with tf.variable_scope(scope or 'minibatch_d') as scope:
-    scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+    scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
     if reuse_scope:
       scope.reuse_variables()
   
@@ -280,7 +280,7 @@ class RNNGAN(object):
   
     
     with tf.variable_scope('G') as scope:
-      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
       #lstm_cell = tf.nn.rnn_cell.BasicLSTMCell(FLAGS.hidden_size_g, forget_bias=1.0, state_is_tuple=True)
       if is_training and FLAGS.keep_prob < 1:
         #lstm_cell = tf.nn.rnn_cell.DropoutWrapper(
@@ -396,7 +396,7 @@ class RNNGAN(object):
     # Here we create two copies of the discriminator network (that share parameters),
     # as you cannot use the same network with different inputs in TensorFlow.
     with tf.variable_scope('D') as scope:
-      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
       # Make list of tensors. One per step in recurrence.
       # Each tensor is batchsize*numfeatures.
       # TODO: (possibly temporarily) disabling meta info
@@ -736,15 +736,15 @@ def main(_):
     FLAGS.songlength = int(min(((global_step+10)/10)*10,songlength_ceiling))
     FLAGS.songlength = int(min((global_step+1)*4,songlength_ceiling))
  
-  with tf.Graph().as_default(), tf.Session(config=tf.ConfigProto(log_device_placement=FLAGS.log_device_placement)) as session:
-    with tf.variable_scope("model", reuse=None) as scope:
-      scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+  with tf.Graph().as_default(), tf.compat.v1.Session(config=tf.compat.v1.ConfigProto(log_device_placement=FLAGS.log_device_placement)) as session:
+    with tf.compat.v1.variable_scope("model", reuse=None) as scope:
+      scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
       m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
 
     if FLAGS.initialize_d:
       vars_to_restore = {}
-      for v in tf.trainable_variables():
+      for v in tf.compat.v1.trainable_variables():
         if v.name.startswith('model/G/'):
           print(v.name[:-2])
           vars_to_restore[v.name[:-2]] = v
@@ -785,7 +785,7 @@ def main(_):
           print('Changing songlength, now training on {} events from songs.'.format(new_songlength))
           FLAGS.songlength = new_songlength
           with tf.variable_scope("model", reuse=True) as scope:
-            scope.set_regularizer(tfa.layers.l2_regularizer(scale=FLAGS.reg_scale))
+            scope.set_regularizer(tf.keras.regularizers.l2(l=FLAGS.reg_scale))
             m = RNNGAN(is_training=True, num_song_features=num_song_features, num_meta_features=num_meta_features)
 
         if not FLAGS.adam:
